@@ -1,0 +1,213 @@
+openapi: 3.1.0
+info:
+  title: Exchange API
+  version: 0.1.0
+  summary: Canonical HTTP contract for the Microsserv52 Exchange service.
+  description: |
+    Exchange converts between ISO 4217 currencies using a configurable
+    third-party provider. Provider payloads are never exposed; clients receive
+    the stable platform response documented here.
+  contact:
+    name: Microsserv52
+    url: https://github.com/Microsserv52
+  license:
+    name: Educational project
+    identifier: LicenseRef-Educational
+servers:
+  - url: http://localhost:8080
+    description: Standalone local Compose stack
+  - url: http://exchange:8080
+    description: Platform Compose network
+tags:
+  - name: Exchanges
+    description: Currency conversion.
+security:
+  - bearerAuth: []
+paths:
+  /exchanges/{from}/{to}:
+    get:
+      operationId: getExchangeRate
+      summary: Get the current exchange rate between two currencies.
+      description: |
+        Requires authentication. The response carries the provider-derived sell
+        and buy rates, the UTC observation timestamp and the authenticated
+        account identifier.
+
+        Unsupported or invalid ISO 4217 codes return `422`. Provider timeouts,
+        provider 5xx responses and malformed provider payloads return `502`.
+        Provider rate limiting and per-instance concurrency protection return
+        `429` or `503` with `Retry-After` where applicable.
+      tags: [Exchanges]
+      parameters:
+        - $ref: "#/components/parameters/FromCurrency"
+        - $ref: "#/components/parameters/ToCurrency"
+      responses:
+        "200":
+          description: Exchange rate.
+          headers:
+            Cache-Control:
+              description: Always `no-store`; caching belongs to the service cache.
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExchangeRate"
+              examples:
+                usdEur:
+                  summary: USD to EUR
+                  value:
+                    sell: 0.8202
+                    buy: 0.8150
+                    date: "2021-09-01 14:23:42"
+                    id-account: 0195ae95-5be7-7dd3-b35d-7a7d87c404fb
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnsupportedCurrency"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/ProviderFailure"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: HS256 JWT issued by Auth. The token subject is the account UUID.
+  parameters:
+    FromCurrency:
+      name: from
+      in: path
+      required: true
+      description: ISO 4217 alphabetic source currency code.
+      schema:
+        type: string
+        pattern: "^[A-Za-z]{3}$"
+        minLength: 3
+        maxLength: 3
+      example: USD
+    ToCurrency:
+      name: to
+      in: path
+      required: true
+      description: ISO 4217 alphabetic target currency code.
+      schema:
+        type: string
+        pattern: "^[A-Za-z]{3}$"
+        minLength: 3
+        maxLength: 3
+      example: EUR
+  schemas:
+    ExchangeRate:
+      type: object
+      additionalProperties: false
+      required: [sell, buy, date, id-account]
+      properties:
+        sell:
+          type: number
+          exclusiveMinimum: 0
+          description: Rate at which the provider sells the target currency.
+        buy:
+          type: number
+          exclusiveMinimum: 0
+          description: Rate at which the provider buys the target currency.
+        date:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$"
+          description: UTC observation timestamp in `YYYY-MM-DD HH:MM:SS` form.
+        id-account:
+          type: string
+          format: uuid
+          description: Authenticated account identifier from the token subject.
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          pattern: "^[A-Z][A-Z0-9_]*$"
+          description: Stable machine-readable error code.
+        message:
+          type: string
+          minLength: 1
+          description: Safe human-readable message. Never contains provider secrets.
+  responses:
+    Unauthorized:
+      description: Missing, expired or invalid bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            unauthorized:
+              value:
+                code: UNAUTHORIZED
+                message: Authentication is required
+    UnsupportedCurrency:
+      description: Invalid or unsupported currency code.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            invalidCode:
+              value:
+                code: INVALID_CURRENCY
+                message: Currency codes must be three ISO 4217 letters
+            unsupported:
+              value:
+                code: UNSUPPORTED_CURRENCY
+                message: Currency is not supported by the exchange provider
+    RateLimited:
+      description: Per-instance provider rate limit was exceeded.
+      headers:
+        Retry-After:
+          description: Seconds before the caller should retry.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            limited:
+              value:
+                code: RATE_LIMITED
+                message: Too many exchange requests; retry later
+    ProviderFailure:
+      description: The external provider failed, timed out or returned an invalid payload.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            unavailable:
+              value:
+                code: PROVIDER_UNAVAILABLE
+                message: Exchange provider is unavailable
+            invalidPayload:
+              value:
+                code: PROVIDER_INVALID_RESPONSE
+                message: Exchange provider returned an invalid response
+    ServiceUnavailable:
+      description: Provider configuration is missing or the instance is saturated.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            notConfigured:
+              value:
+                code: PROVIDER_NOT_CONFIGURED
+                message: Exchange provider is not configured
+            busy:
+              value:
+                code: PROVIDER_BUSY
+                message: Exchange provider concurrency limit reached

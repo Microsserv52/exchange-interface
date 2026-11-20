@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://microsserv52.github.io/exchange-interface/schemas/exchange-rate.schema.json",
+  "title": "ExchangeRate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sell", "buy", "date", "id-account"],
+  "properties": {
+    "sell": { "type": "number", "exclusiveMinimum": 0 },
+    "buy": { "type": "number", "exclusiveMinimum": 0 },
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$"
+    },
+    "id-account": { "type": "string", "format": "uuid" }
+  }
+}

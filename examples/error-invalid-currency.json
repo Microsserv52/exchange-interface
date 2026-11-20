@@ -1,0 +1,4 @@
+{
+  "code": "INVALID_CURRENCY",
+  "message": "Currency codes must be three ISO 4217 letters"
+}
