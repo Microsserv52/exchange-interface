@@ -1,5 +1,7 @@
 # Exchange interface
 
+![Tech Stack](https://skillicons.dev/icons?i=python,fastapi,docker,githubactions)
+
 Canonical HTTP contract for the [Microsserv52 Exchange service](https://github.com/Microsserv52/exchange).
 The contract is published independently so Gateway, Order and contract tests can
 consume the exact version without cloning the service or the
